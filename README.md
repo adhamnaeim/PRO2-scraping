@@ -14,7 +14,7 @@ cd your-repo
 ```bash
 # Windows
 python -m venv .venv
-.venv\Scripts\activate
+venv\Scripts\activate
 
 # macOS/Linux
 python3 -m venv .venv
@@ -41,7 +41,7 @@ uvicorn backend.main:app --reload --port 8001
 ### 5. Run the Scraper Script (optional)
 
 ```bash
-python scraper/scraper.py
+python scrapers/scraper.py
 ```
 
 ---

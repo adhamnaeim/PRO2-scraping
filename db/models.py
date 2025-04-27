@@ -1,11 +1,12 @@
 from sqlalchemy import Column, Integer, String, Float
 from db.database import Base
 
-class ScrapedItem(Base):
-    __tablename__ = 'items'
+class Listing(Base):
+    __tablename__ = "listings"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String)
-    price = Column(Float)
-    rating = Column(Float)
-    description = Column(String)
+    title = Column(String, nullable=True)
+    rent = Column(Integer, nullable=True)
+    area = Column(Integer, nullable=True)
+    address = Column(String, nullable=True)
+    url = Column(String, nullable=True)
