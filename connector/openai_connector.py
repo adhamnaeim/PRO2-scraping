@@ -1,15 +1,12 @@
-import openai
+from dotenv import load_dotenv
 import os
+from openai import OpenAI
 
-openai.api_key = os.getenv("OPENAI_API_KEY")  # Set in .env or export in terminal
+load_dotenv()
 
-def summarize_text(text):
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": f"Summarize this: {text}"}]
-    )
-    return response.choices[0].message["content"]
+openai_api_key = os.getenv("OPENAI_API_KEY")
 
-if __name__ == "__main__":
-    summary = summarize_text("The quick brown fox jumps over the lazy dog.")
-    print("Summary:", summary)
+if not openai_api_key:
+    raise ValueError("OPENAI_API_KEY not found in environment variables. Please set it in your .env file.")
+
+client = OpenAI(api_key=openai_api_key)

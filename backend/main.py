@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from scrapers.wolf import scrape_wolf  # manual scraper
+from scrapers.ai_scraper import scrape_ai_listings # ai scraper
 
 app = FastAPI()
 
@@ -25,10 +26,9 @@ Base.metadata.create_all(bind=engine)
 from typing import Optional
 
 class ListingBase(BaseModel):
-    id: int  # <- MATCH the database (INTEGER id)
     title: str
     rent: int
-    area: Optional[int] = None  # <- allow area to be missing (null)
+    area: Optional[int] = None  
     address: str
     url: str
 
@@ -36,6 +36,7 @@ class ListingCreate(ListingBase):
     pass
 
 class ListingRead(ListingBase):
+    id:int #auto id
     class Config:
         orm_mode = True  # for automatic serializing from ORM objects
 
@@ -52,16 +53,8 @@ def get_db():
 @app.get("/listings", response_model=List[ListingRead])
 def get_listings(db: Session = Depends(get_db)):
     listings = db.query(Listing).all()
-
-    if not listings:
-        scraped = scrape_wolf()
-        for l in scraped:
-            listing = Listing(**l)
-            db.add(listing)
-        db.commit()
-        listings = db.query(Listing).all()
-
     return listings
+
 
 @app.post("/listings", response_model=ListingRead)
 def create_listing(listing: ListingCreate, db: Session = Depends(get_db)):
@@ -72,15 +65,42 @@ def create_listing(listing: ListingCreate, db: Session = Depends(get_db)):
     return db_listing
 
 @app.post("/scrape_wolf")
-def scrape_wolf_listings(db: Session = Depends(get_db)):
+def scrape_wolf_listings():
+    db = SessionLocal()
     listings = scrape_wolf()
+    added_count = 0
+
     for l in listings:
-        listing = Listing(**l)
-        db.add(listing)
+        existing_listing = db.query(Listing).filter_by(url=l["url"]).first()
+        if not existing_listing:
+            listing = Listing(**l)
+            db.add(listing)
+            added_count += 1
+
     db.commit()
-    return {"status": "success", "listings_added": len(listings)}
+    db.close()
+
+    return {"status": "success", "listings_added": added_count}
 
 @app.get("/scrape_wolf")
 def scrape_wolf_get():
     listings = scrape_wolf()
     return {"status": "success", "listings": listings}
+
+@app.get("/scrape_ai")
+def scrape_ai_endpoint():
+    try:
+        # listings_page = "https://titownieruchomosci.gratka.pl/nieruchomosci/mieszkania/wynajem"
+        listings_page = "https://wolfnieruchomosci.gratka.pl"
+        listings = scrape_ai_listings(listings_page)
+        return {"status": "success", "listings": listings}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# @app.post("/scrape_ai")
+# def scrape_ai_endpoint(url: str):
+#     try:
+#         listing = scrape_with_ai(url)
+#         return {"status": "success", "listing": listing}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))

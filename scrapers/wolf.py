@@ -4,7 +4,9 @@ import json
 
 def scrape_wolf():
     base_url = "https://wolfnieruchomosci.gratka.pl"
-    listings_page = f"{base_url}/nieruchomosci/mieszkania/wynajem"
+    # listings_page = base_url
+    listings_page = "https://wolfnieruchomosci.gratka.pl/nieruchomosci/domy/wynajem"
+    # listings_page = f"{base_url}/nieruchomosci/mieszkania/wynajem"
 
     # Fetch the main listings page
     response = requests.get(listings_page)
@@ -16,7 +18,6 @@ def scrape_wolf():
     listings = []
 
     for link in links:
-        print(f"Scraping: {link}")
         full_url = link if link.startswith("http") else f"https://{link.lstrip('/')}"
 
         # Fetch each individual listing page
@@ -26,7 +27,6 @@ def scrape_wolf():
         try:
             # Get raw HTML content for debugging
             raw_html = listing_soup.prettify()
-            print(f"Raw HTML for {full_url}: \n{raw_html[:1000]}...")  # Show first 1000 chars
 
             # Parse the listing data from JSON embedded in the page
             nuxt_data_script = listing_soup.select_one("#__NUXT_DATA__")
@@ -72,14 +72,19 @@ def scrape_wolf():
             print(f"Area: {area}")
             print(f"Link: {external_link}")
 
-            # Append the listing data to the list
-            listings.append({
+            
+
+            item = {
                 "title": title,
                 "rent": rent,
                 "area": area,
                 "address": address,
                 "url": external_link,
-            })
+            }
+
+            listings.append(item)
+
+            send_to_api(item)
 
         except Exception as e:
             print(f"Error parsing {full_url}: {e}")
@@ -95,7 +100,7 @@ def send_to_api(item):
     else:
         print("Failed to send item:", response.status_code, response.text)
 
-if __name__ == "__main__":
-    url = "http://scrapethissite.com"
-    item = send_to_api(url)
-    send_to_api(item)
+# if __name__ == "__main__":
+#     url = "http://scrapethissite.com"
+#     item = send_to_api(url)
+#     send_to_api(item)

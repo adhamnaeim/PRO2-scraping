@@ -6,7 +6,7 @@ __pycache__/
 # Virtual environment
 .venv/
 venv/
-env/
+pyvenv.cfg
 
 # SQLite database
 *.db
