@@ -90,17 +90,8 @@ def scrape_wolf_get():
 @app.get("/scrape_ai")
 def scrape_ai_endpoint():
     try:
-        # listings_page = "https://titownieruchomosci.gratka.pl/nieruchomosci/mieszkania/wynajem"
         listings_page = "https://wolfnieruchomosci.gratka.pl"
         listings = scrape_ai_listings(listings_page)
         return {"status": "success", "listings": listings}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-# @app.post("/scrape_ai")
-# def scrape_ai_endpoint(url: str):
-#     try:
-#         listing = scrape_with_ai(url)
-#         return {"status": "success", "listing": listing}
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=str(e))
