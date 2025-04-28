@@ -27,7 +27,14 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Run the FastAPI Backend
+### 4. Create .env file
+
+```bash
+- Create a new file and call it .env
+- Add OPENAI_API_KEY=key-here
+```
+
+### 5. Run the FastAPI Backend
 
 ```bash
 uvicorn backend.main:app --reload --port 8001
@@ -39,12 +46,6 @@ uvicorn backend.main:app --reload --port 8001
 - Scraped Items (DB) at: `http://127.0.0.1:8001/listings`
 - Manual Scraper at: `http://127.0.0.1:8001/scrape_wolf`
 - AI Scraper at: `http://127.0.0.1:8001/scrape_ai`
-
-### 5. Run the Scraper Script (optional)
-
-```bash
-python scrapers/scraper.py
-```
 
 ---
 
