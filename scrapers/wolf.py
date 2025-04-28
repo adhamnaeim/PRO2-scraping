@@ -2,6 +2,8 @@ import requests
 from bs4 import BeautifulSoup
 import json
 
+from backend.listing_service import send_to_api
+
 def scrape_wolf():
     base_url = "https://wolfnieruchomosci.gratka.pl"
     # listings_page = base_url
@@ -73,7 +75,6 @@ def scrape_wolf():
             print(f"Link: {external_link}")
 
             
-
             item = {
                 "title": title,
                 "rent": rent,
@@ -83,7 +84,6 @@ def scrape_wolf():
             }
 
             listings.append(item)
-
             send_to_api(item)
 
         except Exception as e:
@@ -91,16 +91,3 @@ def scrape_wolf():
             continue
 
     return listings
-
-def send_to_api(item):
-    api_url = "http://127.0.0.1:8001/listings"
-    response = requests.post(api_url, json=item)
-    if response.status_code == 200:
-        print("Item sent successfully:", response.json())
-    else:
-        print("Failed to send item:", response.status_code, response.text)
-
-# if __name__ == "__main__":
-#     url = "http://scrapethissite.com"
-#     item = send_to_api(url)
-#     send_to_api(item)

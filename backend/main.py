@@ -5,7 +5,6 @@ from typing import List
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-
 from scrapers.wolf import scrape_wolf  # manual scraper
 from scrapers.ai_scraper import scrape_ai_listings # ai scraper
 
@@ -64,24 +63,6 @@ def create_listing(listing: ListingCreate, db: Session = Depends(get_db)):
     db.refresh(db_listing)
     return db_listing
 
-@app.post("/scrape_wolf")
-def scrape_wolf_listings():
-    db = SessionLocal()
-    listings = scrape_wolf()
-    added_count = 0
-
-    for l in listings:
-        existing_listing = db.query(Listing).filter_by(url=l["url"]).first()
-        if not existing_listing:
-            listing = Listing(**l)
-            db.add(listing)
-            added_count += 1
-
-    db.commit()
-    db.close()
-
-    return {"status": "success", "listings_added": added_count}
-
 @app.get("/scrape_wolf")
 def scrape_wolf_get():
     listings = scrape_wolf()
@@ -95,3 +76,4 @@ def scrape_ai_endpoint():
         return {"status": "success", "listings": listings}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+   

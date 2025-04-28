@@ -4,6 +4,8 @@ from bs4 import BeautifulSoup
 from openai import OpenAI
 from dotenv import load_dotenv
 
+from backend.listing_service import send_to_api
+
 # Load environment variables
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -58,7 +60,7 @@ def scrape_with_ai(url: str):
     """
 
     ai_response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.2
     )
@@ -80,19 +82,19 @@ def scrape_with_ai(url: str):
     return extracted
 
 
-def send_to_api(item):
-    item['rent'] = clean_rent(item.get('rent', ""))
-    item['area'] = clean_area(item.get('area', ""))
+# def send_to_api(item):
+#     item['rent'] = clean_rent(item.get('rent', ""))
+#     item['area'] = clean_area(item.get('area', ""))
 
-    if item['rent'] and isinstance(item.get('address'), str):
-        api_url = "http://127.0.0.1:8001/listings"
-        response = requests.post(api_url, json=item)
-        if response.status_code == 200:
-            print("Item sent successfully:", response.json())
-        else:
-            print("Failed to send item:", response.status_code, response.text)
-    else:
-        print(f"Skipping invalid item: {item['url']}")
+#     if item['rent'] and isinstance(item.get('address'), str):
+#         api_url = "http://127.0.0.1:8001/listings"
+#         response = requests.post(api_url, json=item)
+#         if response.status_code == 200:
+#             print("Item sent successfully:", response.json())
+#         else:
+#             print("Failed to send item:", response.status_code, response.text)
+#     else:
+#         print(f"Skipping invalid item: {item['url']}")
 
 
 def scrape_ai_listings(listings_page: str):
@@ -108,8 +110,8 @@ def scrape_ai_listings(listings_page: str):
 
         try:
             listing = scrape_with_ai(full_url)
-            # listing['rent'] = clean_rent(listing.get('rent', ""))
-            # listing['area'] = clean_area(listing.get('area', ""))
+            listing['rent'] = clean_rent(listing.get('rent', ""))
+            listing['area'] = clean_area(listing.get('area', ""))
             send_to_api(listing)
         
             scraped_listings.append(listing)
