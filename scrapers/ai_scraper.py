@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 from openai import OpenAI
 from dotenv import load_dotenv
 from typing import Dict, List
+import time
 
 from backend.listing_service import send_to_api
 
@@ -26,9 +27,12 @@ def parse_selectors_from_ai(ai_response_text: str) -> Dict[str, str]:
                 selectors[key] = value
     return selectors
 
-def scrape_with_ai(url: str) -> Dict[str, str]:
+def scrape_with_ai(url: str) -> Dict[str, str | float]:
     """Scrape a single listing page using AI-generated selectors."""
     try:
+        # Start timing
+        start_time = time.time()
+
         # Fetch the page
         response = requests.get(url, timeout=10)
         response.raise_for_status()
@@ -79,7 +83,12 @@ def scrape_with_ai(url: str) -> Dict[str, str]:
             element = extraction_soup.select_one(selector)
             extracted[field] = element.get_text(strip=True) if element else "Not Available"
 
+        # Stop timing
+        elapsed_time = time.time() - start_time
+
         extracted["url"] = url
+        extracted["elapsed_time"] = elapsed_time
+        extracted["scraper_type"] = "ai"  # Added scraper_type
         print("Extracted listing:", extracted)
         return extracted
 
@@ -90,7 +99,7 @@ def scrape_with_ai(url: str) -> Dict[str, str]:
         print(f"Error processing {url}: {e}")
         raise
 
-def scrape_ai_listings(listings_page: str) -> List[Dict[str, str]]:
+def scrape_ai_listings(listings_page: str) -> List[Dict[str, str | float]]:
     """Scrape multiple listings from a listings page."""
     try:
         response = requests.get(listings_page, timeout=10)

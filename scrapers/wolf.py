@@ -2,10 +2,11 @@ import requests
 from bs4 import BeautifulSoup
 import json
 from typing import List, Dict
+import time
 
 from backend.listing_service import send_to_api
 
-def scrape_wolf(listings_page: str) -> List[Dict[str, str | int | None]]:
+def scrape_wolf(listings_page: str) -> List[Dict[str, str | int | float | None]]:
     """Scrape property listings from a specific website using the provided listings page URL."""
     try:
         # Fetch the main listings page
@@ -20,6 +21,9 @@ def scrape_wolf(listings_page: str) -> List[Dict[str, str | int | None]]:
         for link in links:
             full_url = link if link.startswith("http") else f"https://{link.lstrip('/')}"
             try:
+                # Start timing
+                start_time = time.time()
+
                 # Fetch individual listing page
                 listing_response = requests.get(full_url, timeout=10)
                 listing_response.raise_for_status()
@@ -56,13 +60,18 @@ def scrape_wolf(listings_page: str) -> List[Dict[str, str | int | None]]:
                 if area_tag and "m²" in area_tag.text:
                     area = int(float("".join(filter(str.isdigit, area_tag.text))))
 
-                # Create listing item
+                # Stop timing
+                elapsed_time = time.time() - start_time
+
+                # Create listing item with elapsed_time and scraper_type
                 item = {
                     "title": title,
                     "rent": rent,
                     "area": area,
                     "address": address,
                     "url": full_url,
+                    "elapsed_time": elapsed_time,
+                    "scraper_type": "manual",  # Added scraper_type
                 }
 
                 listings.append(item)

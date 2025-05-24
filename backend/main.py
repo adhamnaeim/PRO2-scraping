@@ -30,6 +30,8 @@ class ListingBase(BaseModel):
     area: int | None = None
     address: str
     url: str
+    elapsed_time: float | None = None
+    scraper_type: str | None = None  # Added scraper_type
 
 class ListingCreate(ListingBase):
     pass
@@ -71,7 +73,7 @@ def create_listing(listing: ListingCreate, db: Session = Depends(get_db)):
 @app.get("/scrape_wolf")
 def scrape_wolf_endpoint():
     """Scrape listings using the manual scraper."""
-    listings_page = "https://wolfnieruchomosci.gratka.pl/nieruchomosci/domy/wynajem"
+    listings_page = "https://wolfnieruchomosci.gratka.pl/nieruchomosci/mieszkania"
     try:
         listings = scrape_wolf(listings_page)
         return {"status": "success", "listings": listings}
@@ -81,9 +83,28 @@ def scrape_wolf_endpoint():
 @app.get("/scrape_ai")
 def scrape_ai_endpoint():
     """Scrape listings using the AI-powered scraper."""
-    listings_page = "https://wolfnieruchomosci.gratka.pl/"
+    listings_page = "https://wolfnieruchomosci.gratka.pl/nieruchomosci/mieszkania"
     try:
         listings = scrape_ai_listings(listings_page)
         return {"status": "success", "listings": listings}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Scraping failed: {str(e)}")
+
+@app.get("/stats")
+def get_stats(db: Session = Depends(get_db)):
+    """Calculate average elapsed time for AI and manualburgo
+
+    listings = db.query(Listing).all()
+    
+    ai_times = [listing.elapsed_time for listing in listings if listing.scraper_type == "ai" and listing.elapsed_time is not None]
+    manual_times = [listing.elapsed_time for listing in listings if listing.scraper_type == "manual" and listing.elapsed_time is not None]
+    
+    avg_ai_time = sum(ai_times) / len(ai_times) if ai_times else 0
+    avg_manual_time = sum(manual_times) / len(manual_times) if manual_times else 0
+    
+    return {
+        "average_ai_scraper_time": avg_ai_time,
+        "average_manual_scraper_time": avg_manual_time,
+        "ai_scraper_count": len(ai_times),
+        "manual_scraper_count": len(manual_times)
+    } """

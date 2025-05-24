@@ -10,3 +10,5 @@ class Listing(Base):
     rent = Column(Integer, nullable=True)
     area = Column(Integer, nullable=True)
     address = Column(String, nullable=True)
+    elapsed_time = Column(Float, nullable=True)
+    scraper_type = Column(String, nullable=True)  # Added to distinguish scraper type
