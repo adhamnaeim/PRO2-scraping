@@ -3,11 +3,16 @@ from bs4 import BeautifulSoup
 import json
 from typing import List, Dict
 import time
+import tracemalloc
 
 from backend.listing_service import send_to_api
 
+# Global counter for processed listings
+manual_processed_count = 0
+
 def scrape_wolf(listings_page: str) -> List[Dict[str, str | int | float | None]]:
     """Scrape property listings from a specific website using the provided listings page URL."""
+    global manual_processed_count
     try:
         # Fetch the main listings page
         response = requests.get(listings_page, timeout=10)
@@ -21,8 +26,9 @@ def scrape_wolf(listings_page: str) -> List[Dict[str, str | int | float | None]]
         for link in links:
             full_url = link if link.startswith("http") else f"https://{link.lstrip('/')}"
             try:
-                # Start timing
+                # Start timing and memory tracking
                 start_time = time.time()
+                tracemalloc.start()
 
                 # Fetch individual listing page
                 listing_response = requests.get(full_url, timeout=10)
@@ -60,10 +66,12 @@ def scrape_wolf(listings_page: str) -> List[Dict[str, str | int | float | None]]
                 if area_tag and "m²" in area_tag.text:
                     area = int(float("".join(filter(str.isdigit, area_tag.text))))
 
-                # Stop timing
+                # Stop timing and memory tracking
                 elapsed_time = time.time() - start_time
+                current, peak = tracemalloc.get_traced_memory()
+                tracemalloc.stop()
 
-                # Create listing item with elapsed_time and scraper_type
+                # Create listing item with elapsed_time, memory_usage, and scraper_type
                 item = {
                     "title": title,
                     "rent": rent,
@@ -71,17 +79,23 @@ def scrape_wolf(listings_page: str) -> List[Dict[str, str | int | float | None]]
                     "address": address,
                     "url": full_url,
                     "elapsed_time": elapsed_time,
-                    "scraper_type": "manual",  # Added scraper_type
+                    "memory_usage": peak / 1024 / 1024,  # Convert to MB
+                    "scraper_type": "manual",  # Still needed for send_to_api logic
                 }
 
                 listings.append(item)
                 send_to_api(item)
 
+                # Increment processed count
+                manual_processed_count += 1
+
             except requests.RequestException as e:
                 print(f"Error fetching {full_url}: {e}")
+                tracemalloc.stop()
                 continue
             except Exception as e:
                 print(f"Error parsing {full_url}: {e}")
+                tracemalloc.stop()
                 continue
 
         return listings
@@ -89,3 +103,12 @@ def scrape_wolf(listings_page: str) -> List[Dict[str, str | int | float | None]]
     except requests.RequestException as e:
         print(f"Error fetching listings page {listings_page}: {e}")
         raise
+
+def get_manual_processed_count() -> int:
+    """Return the number of listings processed by the manual scraper."""
+    return manual_processed_count
+
+def reset_manual_processed_count():
+    """Reset the manual processed count."""
+    global manual_processed_count
+    manual_processed_count = 0

@@ -5,8 +5,12 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from typing import Dict, List
 import time
+import tracemalloc
 
 from backend.listing_service import send_to_api
+
+# Global counter for processed listings
+ai_processed_count = 0
 
 # Load environment variables
 load_dotenv()
@@ -29,10 +33,11 @@ def parse_selectors_from_ai(ai_response_text: str) -> Dict[str, str]:
 
 def scrape_with_ai(url: str) -> Dict[str, str | float]:
     """Scrape a single listing page using AI-generated selectors."""
-    try:
-        # Start timing
-        start_time = time.time()
+    global ai_processed_count
+    tracemalloc.start()  # Start memory tracking
+    start_time = time.time()
 
+    try:
         # Fetch the page
         response = requests.get(url, timeout=10)
         response.raise_for_status()
@@ -55,7 +60,8 @@ def scrape_with_ai(url: str) -> Dict[str, str | float]:
             print("⚠️ No good container found. Using full page fallback.")
             html_to_send = soup.prettify()[:3000]
 
-        # AI prompt to generate selectors
+        # Start timing for CSS selector generation
+        selector_start_time = time.time()
         prompt = (
             "You are a scraping expert. Given the following HTML snippet, extract the best CSS selectors for:\n"
             "- title\n- rent\n- area\n- address\n"
@@ -70,6 +76,7 @@ def scrape_with_ai(url: str) -> Dict[str, str | float]:
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2
         )
+        selector_time = time.time() - selector_start_time
 
         # Parse AI-generated selectors
         selectors = parse_selectors_from_ai(ai_response.choices[0].message.content)
@@ -83,20 +90,30 @@ def scrape_with_ai(url: str) -> Dict[str, str | float]:
             element = extraction_soup.select_one(selector)
             extracted[field] = element.get_text(strip=True) if element else "Not Available"
 
-        # Stop timing
+        # Stop timing and memory tracking
         elapsed_time = time.time() - start_time
+        current, peak = tracemalloc.get_traced_memory()  # Memory usage in bytes
+        tracemalloc.stop()
 
         extracted["url"] = url
         extracted["elapsed_time"] = elapsed_time
-        extracted["scraper_type"] = "ai"  # Added scraper_type
+        extracted["selector_time"] = selector_time
+        extracted["memory_usage"] = peak / 1024 / 1024  # Convert to MB
+        extracted["scraper_type"] = "ai"  # Still needed for send_to_api logic
         print("Extracted listing:", extracted)
+
+        # Increment processed count
+        ai_processed_count += 1
+
         return extracted
 
     except requests.RequestException as e:
         print(f"Error fetching {url}: {e}")
+        tracemalloc.stop()
         raise
     except Exception as e:
         print(f"Error processing {url}: {e}")
+        tracemalloc.stop()
         raise
 
 def scrape_ai_listings(listings_page: str) -> List[Dict[str, str | float]]:
@@ -144,3 +161,12 @@ def clean_area(area_value: str) -> int | None:
         return int(float(area_value))
     except ValueError:
         return None
+
+def get_ai_processed_count() -> int:
+    """Return the number of listings processed by the AI scraper."""
+    return ai_processed_count
+
+def reset_ai_processed_count():
+    """Reset the AI processed count."""
+    global ai_processed_count
+    ai_processed_count = 0

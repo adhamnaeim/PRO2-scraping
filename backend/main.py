@@ -6,8 +6,8 @@ from typing import List
 from db.models import Listing
 from db.database import SessionLocal, engine, Base
 from pydantic import BaseModel
-from scrapers.wolf import scrape_wolf
-from scrapers.ai_scraper import scrape_ai_listings
+from scrapers.wolf import scrape_wolf, get_manual_processed_count, reset_manual_processed_count
+from scrapers.ai_scraper import scrape_ai_listings, get_ai_processed_count, reset_ai_processed_count
 
 app = FastAPI()
 
@@ -30,11 +30,23 @@ class ListingBase(BaseModel):
     area: int | None = None
     address: str
     url: str
-    elapsed_time: float | None = None
-    scraper_type: str | None = None  # Added scraper_type
+    ai_elapsed_time: float | None = None
+    ai_selector_time: float | None = None
+    ai_memory_usage: float | None = None
+    manual_elapsed_time: float | None = None
+    manual_memory_usage: float | None = None
 
-class ListingCreate(ListingBase):
-    pass
+class ListingCreate(BaseModel):
+    title: str
+    rent: int
+    area: int | None = None
+    address: str
+    url: str
+    ai_elapsed_time: float | None = None
+    ai_selector_time: float | None = None
+    ai_memory_usage: float | None = None
+    manual_elapsed_time: float | None = None
+    manual_memory_usage: float | None = None
 
 class ListingRead(ListingBase):
     id: int
@@ -57,8 +69,10 @@ def read_root():
     return {"message": "Welcome to the Property Listings API"}
 
 @app.get("/listings", response_model=List[ListingRead])
-def get_listings(db: Session = Depends(get_db)):
-    """Retrieve all listings from the database."""
+def get_listings(url: str | None = None, db: Session = Depends(get_db)):
+    """Retrieve all listings from the database, optionally filtering by URL."""
+    if url:
+        return db.query(Listing).filter(Listing.url == url).all()
     return db.query(Listing).all()
 
 @app.post("/listings", response_model=ListingRead)
@@ -66,6 +80,18 @@ def create_listing(listing: ListingCreate, db: Session = Depends(get_db)):
     """Create a new listing in the database."""
     db_listing = Listing(**listing.dict())
     db.add(db_listing)
+    db.commit()
+    db.refresh(db_listing)
+    return db_listing
+
+@app.put("/listings/{listing_id}", response_model=ListingRead)
+def update_listing(listing_id: int, listing: ListingCreate, db: Session = Depends(get_db)):
+    """Update an existing listing in the database."""
+    db_listing = db.query(Listing).filter(Listing.id == listing_id).first()
+    if not db_listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    for key, value in listing.dict().items():
+        setattr(db_listing, key, value)
     db.commit()
     db.refresh(db_listing)
     return db_listing
@@ -92,19 +118,27 @@ def scrape_ai_endpoint():
 
 @app.get("/stats")
 def get_stats(db: Session = Depends(get_db)):
-    """Calculate average elapsed time for AI and manualburgo
-
+    """Calculate average elapsed time, selector time, and memory usage for AI and manual scrapers."""
     listings = db.query(Listing).all()
     
-    ai_times = [listing.elapsed_time for listing in listings if listing.scraper_type == "ai" and listing.elapsed_time is not None]
-    manual_times = [listing.elapsed_time for listing in listings if listing.scraper_type == "manual" and listing.elapsed_time is not None]
+    ai_elapsed_times = [l.ai_elapsed_time for l in listings if l.ai_elapsed_time is not None]
+    ai_selector_times = [l.ai_selector_time for l in listings if l.ai_selector_time is not None]
+    ai_memory_usages = [l.ai_memory_usage for l in listings if l.ai_memory_usage is not None]
+    manual_elapsed_times = [l.manual_elapsed_time for l in listings if l.manual_elapsed_time is not None]
+    manual_memory_usages = [l.manual_memory_usage for l in listings if l.manual_memory_usage is not None]
     
-    avg_ai_time = sum(ai_times) / len(ai_times) if ai_times else 0
-    avg_manual_time = sum(manual_times) / len(manual_times) if manual_times else 0
+    avg_ai_time = sum(ai_elapsed_times) / len(ai_elapsed_times) if ai_elapsed_times else 0
+    avg_ai_selector_time = sum(ai_selector_times) / len(ai_selector_times) if ai_selector_times else 0
+    avg_ai_memory = sum(ai_memory_usages) / len(ai_memory_usages) if ai_memory_usages else 0
+    avg_manual_time = sum(manual_elapsed_times) / len(manual_elapsed_times) if manual_elapsed_times else 0
+    avg_manual_memory = sum(manual_memory_usages) / len(manual_memory_usages) if manual_memory_usages else 0
     
     return {
         "average_ai_scraper_time": avg_ai_time,
         "average_manual_scraper_time": avg_manual_time,
-        "ai_scraper_count": len(ai_times),
-        "manual_scraper_count": len(manual_times)
-    } """
+        "average_ai_selector_time": avg_ai_selector_time,
+        "average_ai_memory_usage_mb": avg_ai_memory,
+        "average_manual_memory_usage_mb": avg_manual_memory,
+        "ai_scraper_count": get_ai_processed_count(),
+        "manual_scraper_count": get_manual_processed_count(),
+    }

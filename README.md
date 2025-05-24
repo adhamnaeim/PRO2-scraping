@@ -46,6 +46,7 @@ uvicorn backend.main:app --reload --port 8001
 - Scraped Items (DB) at: `http://127.0.0.1:8001/listings`
 - Manual Scraper at: `http://127.0.0.1:8001/scrape_wolf`
 - AI Scraper at: `http://127.0.0.1:8001/scrape_ai`
+- Stats at: `http://127.0.0.1:8001/stats`
 
 ---
 

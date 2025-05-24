@@ -10,5 +10,10 @@ class Listing(Base):
     rent = Column(Integer, nullable=True)
     area = Column(Integer, nullable=True)
     address = Column(String, nullable=True)
-    elapsed_time = Column(Float, nullable=True)
-    scraper_type = Column(String, nullable=True)  # Added to distinguish scraper type
+    # AI scraper telemetry
+    ai_elapsed_time = Column(Float, nullable=True)
+    ai_selector_time = Column(Float, nullable=True)
+    ai_memory_usage = Column(Float, nullable=True)
+    # Manual scraper telemetry
+    manual_elapsed_time = Column(Float, nullable=True)
+    manual_memory_usage = Column(Float, nullable=True)
