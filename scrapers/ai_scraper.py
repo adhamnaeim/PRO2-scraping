@@ -6,11 +6,16 @@ from dotenv import load_dotenv
 from typing import Dict, List
 import time
 import tracemalloc
+import csv
 
 from backend.listing_service import send_to_api
 
 # Global counter for processed listings
 ai_processed_count = 0
+
+# CSV file setup
+csv_file = "ai_telemetry.csv"
+csv_headers = ["url", "elapsed_time", "selector_time", "memory_usage", "scraper_type"]
 
 # Load environment variables
 load_dotenv()
@@ -31,6 +36,18 @@ def parse_selectors_from_ai(ai_response_text: str) -> Dict[str, str]:
                 selectors[key] = value
     return selectors
 
+def save_to_csv(data: Dict):
+    """Save telemetry data to a CSV file."""
+    try:
+        with open(csv_file, mode='a', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=csv_headers)
+            if file.tell() == 0:  # Write headers only if file is new
+                writer.writeheader()
+            writer.writerow(data)
+        print(f"Successfully wrote telemetry to {csv_file}: {data}")
+    except Exception as e:
+        print(f"Error writing to {csv_file}: {e}")
+        
 def scrape_with_ai(url: str) -> Dict[str, str | float]:
     """Scrape a single listing page using AI-generated selectors."""
     global ai_processed_count
@@ -99,11 +116,24 @@ def scrape_with_ai(url: str) -> Dict[str, str | float]:
         extracted["elapsed_time"] = elapsed_time
         extracted["selector_time"] = selector_time
         extracted["memory_usage"] = peak / 1024 / 1024  # Convert to MB
-        extracted["scraper_type"] = "ai"  # Still needed for send_to_api logic
+        extracted["scraper_type"] = "ai"
         print("Extracted listing:", extracted)
+
+        # Save to CSV
+        csv_data = {
+            "url": url,
+            "elapsed_time": elapsed_time,
+            "selector_time": selector_time,
+            "memory_usage": peak / 1024 / 1024,
+            "scraper_type": "ai"
+        }
+        save_to_csv(csv_data)
 
         # Increment processed count
         ai_processed_count += 1
+
+        # Send to API (for database)
+        send_to_api(extracted)
 
         return extracted
 
@@ -133,7 +163,6 @@ def scrape_ai_listings(listings_page: str) -> List[Dict[str, str | float]]:
                 listing = scrape_with_ai(full_url)
                 listing["rent"] = clean_rent(listing.get("rent", ""))
                 listing["area"] = clean_area(listing.get("area", ""))
-                send_to_api(listing)
                 scraped_listings.append(listing)
             except Exception as e:
                 print(f"Error parsing {full_url}: {e}")

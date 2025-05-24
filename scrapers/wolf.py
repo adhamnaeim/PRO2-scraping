@@ -4,12 +4,29 @@ import json
 from typing import List, Dict
 import time
 import tracemalloc
+import csv
 
 from backend.listing_service import send_to_api
 
 # Global counter for processed listings
 manual_processed_count = 0
 
+# CSV file setup
+csv_file = "manual_telemetry.csv"
+csv_headers = ["url", "elapsed_time", "memory_usage", "scraper_type"]
+
+def save_to_csv(data: Dict):
+    """Save telemetry data to a CSV file."""
+    try:
+        with open(csv_file, mode='a', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=csv_headers)
+            if file.tell() == 0:  # Write headers only if file is new
+                writer.writeheader()
+            writer.writerow(data)
+        print(f"Successfully wrote telemetry to {csv_file}: {data}")
+    except Exception as e:
+        print(f"Error writing to {csv_file}: {e}")
+        
 def scrape_wolf(listings_page: str) -> List[Dict[str, str | int | float | None]]:
     """Scrape property listings from a specific website using the provided listings page URL."""
     global manual_processed_count
@@ -80,11 +97,20 @@ def scrape_wolf(listings_page: str) -> List[Dict[str, str | int | float | None]]
                     "url": full_url,
                     "elapsed_time": elapsed_time,
                     "memory_usage": peak / 1024 / 1024,  # Convert to MB
-                    "scraper_type": "manual",  # Still needed for send_to_api logic
+                    "scraper_type": "manual",
                 }
 
                 listings.append(item)
                 send_to_api(item)
+
+                # Save to CSV
+                csv_data = {
+                    "url": full_url,
+                    "elapsed_time": elapsed_time,
+                    "memory_usage": peak / 1024 / 1024,
+                    "scraper_type": "manual"
+                }
+                save_to_csv(csv_data)
 
                 # Increment processed count
                 manual_processed_count += 1

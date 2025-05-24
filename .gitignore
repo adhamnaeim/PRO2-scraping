@@ -23,3 +23,6 @@ Thumbs.db
 
 # Python crash logs
 *.log
+
+# CSV Files
+*.csv
