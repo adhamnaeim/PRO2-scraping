@@ -11,11 +11,11 @@ from backend.listing_service import send_to_api
 # Global counter for processed listings
 manual_processed_count = 0
 
-# CSV file setup
-csv_file = "manual_telemetry.csv"
+# Default CSV file path
+DEFAULT_CSV_FILE = "manual_telemetry.csv"
 csv_headers = ["url", "elapsed_time", "memory_usage", "scraper_type"]
 
-def save_to_csv(data: Dict):
+def save_to_csv(data: Dict, csv_file: str = DEFAULT_CSV_FILE):
     """Save telemetry data to a CSV file."""
     try:
         with open(csv_file, mode='a', newline='') as file:
@@ -26,7 +26,7 @@ def save_to_csv(data: Dict):
         print(f"Successfully wrote telemetry to {csv_file}: {data}")
     except Exception as e:
         print(f"Error writing to {csv_file}: {e}")
-        
+
 def scrape_wolf(listings_page: str) -> List[Dict[str, str | int | float | None]]:
     """Scrape property listings from a specific website using the provided listings page URL."""
     global manual_processed_count
@@ -83,12 +83,16 @@ def scrape_wolf(listings_page: str) -> List[Dict[str, str | int | float | None]]
                 if area_tag and "m²" in area_tag.text:
                     area = int(float("".join(filter(str.isdigit, area_tag.text))))
 
+                # Clean extracted data
+                rent = clean_rent(str(rent) if rent is not None else "Not Available")
+                area = clean_area(str(area) if area is not None else "Not Available")
+
                 # Stop timing and memory tracking
                 elapsed_time = time.time() - start_time
                 current, peak = tracemalloc.get_traced_memory()
                 tracemalloc.stop()
 
-                # Create listing item with elapsed_time, memory_usage, and scraper_type
+                # Create listing item
                 item = {
                     "title": title,
                     "rent": rent,
@@ -96,7 +100,7 @@ def scrape_wolf(listings_page: str) -> List[Dict[str, str | int | float | None]]
                     "address": address,
                     "url": full_url,
                     "elapsed_time": elapsed_time,
-                    "memory_usage": peak / 1024 / 1024,  # Convert to MB
+                    "memory_usage": peak / 1024 / 1024,
                     "scraper_type": "manual",
                 }
 
@@ -129,6 +133,23 @@ def scrape_wolf(listings_page: str) -> List[Dict[str, str | int | float | None]]
     except requests.RequestException as e:
         print(f"Error fetching listings page {listings_page}: {e}")
         raise
+
+def clean_rent(rent_value: str) -> int | None:
+    """Clean and convert rent value to an integer."""
+    if not rent_value or rent_value == "Not Available":
+        return None
+    numbers = "".join(c for c in rent_value if c.isdigit())
+    return int(numbers) if numbers else None
+
+def clean_area(area_value: str) -> int | None:
+    """Clean and convert area value to an integer."""
+    if not area_value or area_value == "Not Available":
+        return None
+    area_value = area_value.replace("•", "").replace(",", ".").replace("m²", "").strip()
+    try:
+        return int(float(area_value))
+    except ValueError:
+        return None
 
 def get_manual_processed_count() -> int:
     """Return the number of listings processed by the manual scraper."""

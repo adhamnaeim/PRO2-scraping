@@ -47,8 +47,9 @@ def save_to_csv(data: Dict):
         print(f"Successfully wrote telemetry to {csv_file}: {data}")
     except Exception as e:
         print(f"Error writing to {csv_file}: {e}")
-        
-def scrape_with_ai(url: str) -> Dict[str, str | float]:
+
+
+def scrape_with_ai(url: str, model: str = "gpt-4o-mini") -> Dict[str, str | float | int | None]:
     """Scrape a single listing page using AI-generated selectors."""
     global ai_processed_count
     tracemalloc.start()  # Start memory tracking
@@ -79,6 +80,7 @@ def scrape_with_ai(url: str) -> Dict[str, str | float]:
 
         # Start timing for CSS selector generation
         selector_start_time = time.time()
+        print(f"Using model: {model} for API call")  # Debug log
         prompt = (
             "You are a scraping expert. Given the following HTML snippet, extract the best CSS selectors for:\n"
             "- title\n- rent\n- area\n- address\n"
@@ -89,7 +91,7 @@ def scrape_with_ai(url: str) -> Dict[str, str | float]:
 
         # Call OpenAI API
         ai_response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2
         )
@@ -107,15 +109,19 @@ def scrape_with_ai(url: str) -> Dict[str, str | float]:
             element = extraction_soup.select_one(selector)
             extracted[field] = element.get_text(strip=True) if element else "Not Available"
 
+        # Clean extracted data
+        extracted["rent"] = clean_rent(extracted.get("rent", ""))
+        extracted["area"] = clean_area(extracted.get("area", ""))
+
         # Stop timing and memory tracking
         elapsed_time = time.time() - start_time
-        current, peak = tracemalloc.get_traced_memory()  # Memory usage in bytes
+        current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
 
         extracted["url"] = url
         extracted["elapsed_time"] = elapsed_time
         extracted["selector_time"] = selector_time
-        extracted["memory_usage"] = peak / 1024 / 1024  # Convert to MB
+        extracted["memory_usage"] = peak / 1024 / 1024
         extracted["scraper_type"] = "ai"
         print("Extracted listing:", extracted)
 
@@ -132,7 +138,7 @@ def scrape_with_ai(url: str) -> Dict[str, str | float]:
         # Increment processed count
         ai_processed_count += 1
 
-        # Send to API (for database)
+        # Send to API (for database) with cleaned data
         send_to_api(extracted)
 
         return extracted
@@ -146,7 +152,7 @@ def scrape_with_ai(url: str) -> Dict[str, str | float]:
         tracemalloc.stop()
         raise
 
-def scrape_ai_listings(listings_page: str) -> List[Dict[str, str | float]]:
+def scrape_ai_listings(listings_page: str, model: str = "gpt-4o-mini") -> List[Dict[str, str | float | int | None]]:
     """Scrape multiple listings from a listings page."""
     try:
         response = requests.get(listings_page, timeout=10)
@@ -160,9 +166,7 @@ def scrape_ai_listings(listings_page: str) -> List[Dict[str, str | float]]:
         for link in links:
             full_url = link if link.startswith("http") else f"https://{link.lstrip('/')}"
             try:
-                listing = scrape_with_ai(full_url)
-                listing["rent"] = clean_rent(listing.get("rent", ""))
-                listing["area"] = clean_area(listing.get("area", ""))
+                listing = scrape_with_ai(full_url, model=model)
                 scraped_listings.append(listing)
             except Exception as e:
                 print(f"Error parsing {full_url}: {e}")
