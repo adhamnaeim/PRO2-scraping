@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Dict
+import datetime
 
 from db.models import Listing
 from db.database import SessionLocal, engine, Base
@@ -65,9 +66,9 @@ def get_db() -> Session:
     finally:
         db.close()
 
-# Global flag to control scraper termination and store last used model
+# Global flag to control scraper termination and store scraping history
 should_stop = False
-last_used_model = "gpt-4o-mini"  # Default value
+scraping_history = []  # List to store each scraping attempt
 
 # Routes
 @app.get("/")
@@ -113,7 +114,7 @@ def update_listing(listing_id: int, listing: ListingCreate, db: Session = Depend
 @app.get("/scrape")
 def scrape_endpoint(url: str = "https://wolfnieruchomosci.gratka.pl/nieruchomosci/mieszkania", model: str = "gpt-4o-mini"):
     """Scrape listings using both AI and manual scrapers with a configurable AI model."""
-    global should_stop, last_used_model
+    global should_stop, scraping_history
     if should_stop:
         return {"status": "error", "message": "Scraping stopped by user"}
 
@@ -121,7 +122,6 @@ def scrape_endpoint(url: str = "https://wolfnieruchomosci.gratka.pl/nieruchomosc
     valid_models = ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]
     # Use provided model if valid, otherwise fallback to default
     model_to_use = model if model in valid_models else "gpt-4o-mini"
-    last_used_model = model_to_use  # Update the last used model
     
     try:
         # Run AI scraper with the validated model
@@ -132,6 +132,24 @@ def scrape_endpoint(url: str = "https://wolfnieruchomosci.gratka.pl/nieruchomosc
         
         # Combine results, avoiding duplicates by URL
         combined_listings = ai_listings + [l for l in manual_listings if l.get("url") not in [a["url"] for a in ai_listings]]
+        
+        # Calculate attempt-specific stats
+        attempt_stats = {
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "url": url,
+            "used_ai_model": model_to_use,
+            "ai_listings_processed": len(ai_listings),
+            "manual_listings_processed": len(manual_listings),
+            "total_listings_processed": len(combined_listings),
+            "ai_average_scraper_time": sum(l["elapsed_time"] for l in ai_listings) / len(ai_listings) if ai_listings else 0,
+            "ai_average_selector_time": sum(l["selector_time"] for l in ai_listings) / len(ai_listings) if ai_listings else 0,
+            "ai_average_memory_usage_mb": sum(l["memory_usage"] for l in ai_listings) / len(ai_listings) if ai_listings else 0,
+            "manual_average_scraper_time": sum(l["elapsed_time"] for l in manual_listings) / len(manual_listings) if manual_listings else 0,
+            "manual_average_memory_usage_mb": sum(l["memory_usage"] for l in manual_listings) / len(manual_listings) if manual_listings else 0
+        }
+        
+        # Add attempt to history
+        scraping_history.append(attempt_stats)
         
         return {
             "status": "success",
@@ -145,42 +163,32 @@ def scrape_endpoint(url: str = "https://wolfnieruchomosci.gratka.pl/nieruchomosc
 
 @app.get("/stats")
 def get_stats(db: Session = Depends(get_db)):
-    """Calculate detailed metrics for both AI and manual scrapers."""
+    """Return a detailed summary of all scraping attempts and overall stats."""
     listings = db.query(Listing).all()
     
-    # AI scraper metrics
+    # Overall stats from database
     ai_listings = [l for l in listings if l.ai_elapsed_time is not None or l.ai_memory_usage is not None]
-    ai_elapsed_times = [l.ai_elapsed_time for l in ai_listings if l.ai_elapsed_time is not None]
-    ai_selector_times = [l.ai_selector_time for l in ai_listings if l.ai_selector_time is not None]
-    ai_memory_usages = [l.ai_memory_usage for l in ai_listings if l.ai_memory_usage is not None]
-    
-    # Manual scraper metrics
     manual_listings = [l for l in listings if l.manual_elapsed_time is not None or l.manual_memory_usage is not None]
-    manual_elapsed_times = [l.manual_elapsed_time for l in manual_listings if l.manual_elapsed_time is not None]
-    manual_memory_usages = [l.manual_memory_usage for l in manual_listings if l.manual_memory_usage is not None]
     
-    # Calculate detailed stats
-    stats = {
-        "ai_scraper": {
-            "total_processed": len(ai_listings),
-            "average_scraper_time": sum(ai_elapsed_times) / len(ai_elapsed_times) if ai_elapsed_times else 0,
-            "average_selector_time": sum(ai_selector_times) / len(ai_selector_times) if ai_selector_times else 0,
-            "average_memory_usage_mb": sum(ai_memory_usages) / len(ai_memory_usages) if ai_memory_usages else 0,
-            "last_used_model": last_used_model  # Use the dynamically updated model
-        },
-        "manual_scraper": {
-            "total_processed": len(manual_listings),
-            "average_scraper_time": sum(manual_elapsed_times) / len(manual_elapsed_times) if manual_elapsed_times else 0,
-            "average_memory_usage_mb": sum(manual_memory_usages) / len(manual_memory_usages) if manual_memory_usages else 0
-        },
-        "overall": {
-            "total_listings_processed": len(listings),
-            "combined_average_time": (sum(ai_elapsed_times) + sum(manual_elapsed_times)) / (len(ai_elapsed_times) + len(manual_elapsed_times)) if (ai_elapsed_times or manual_elapsed_times) else 0,
-            "combined_average_memory": (sum(ai_memory_usages) + sum(manual_memory_usages)) / (len(ai_memory_usages) + len(manual_memory_usages)) if (ai_memory_usages or manual_memory_usages) else 0
-        }
+    overall_stats = {
+        "total_listings_processed": len(listings),
+        "ai_total_processed": len(ai_listings),
+        "manual_total_processed": len(manual_listings),
+        "combined_average_time": (
+            sum(l.ai_elapsed_time for l in ai_listings if l.ai_elapsed_time) +
+            sum(l.manual_elapsed_time for l in manual_listings if l.manual_elapsed_time)
+        ) / (len(ai_listings) + len(manual_listings)) if (ai_listings or manual_listings) else 0,
+        "combined_average_memory": (
+            sum(l.ai_memory_usage for l in ai_listings if l.ai_memory_usage) +
+            sum(l.manual_memory_usage for l in manual_listings if l.manual_memory_usage)
+        ) / (len(ai_listings) + len(manual_listings)) if (ai_listings or manual_listings) else 0
     }
     
-    return stats
+    # Return history of attempts and overall stats
+    return {
+        "scraping_history": scraping_history,
+        "overall_stats": overall_stats
+    }
 
 # Signal handler for Ctrl+C
 def signal_handler(sig, frame):
