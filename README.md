@@ -49,6 +49,61 @@ uvicorn backend.main:app --reload --port 8001
 
 ---
 
+## Using the Scraper
+
+### Scrape Endpoint
+
+The `/scrape` endpoint allows you to scrape property listings from a specified URL using different OpenAI models for the AI scraper.
+
+#### Base URL
+
+```url
+    http://127.0.0.1:8001/scrape
+```
+
+#### Parameters
+
+- `url` (optional): The URL to scrape (default: `"https://wolfnieruchomosci.gratka.pl/nieruchomosci/mieszkania"`).
+- `model` (optional): The OpenAI model to use for the AI scraper (default: `"gpt-4o-mini"`).
+
+#### Supported Models
+
+- `gpt-4o`
+- `gpt-4o-mini`
+- `gpt-3.5-turbo`
+
+#### Example Requests
+
+1. **Scrape with `gpt-4o` (default URL):**
+
+   ```url
+   http://127.0.0.1:8001/scrape?model=gpt-4o
+   ```
+
+2. **Scrape with `gpt-4o-mini` (custom URL):**
+
+   ```url
+   http://127.0.0.1:8001/scrape?url=https://gratka.pl/nieruchomosci/mieszkania&model=gpt-4o-mini
+   ```
+
+3. **Scrape with `gpt-3.5-turbo` (default URL):**
+
+   ```url
+   http://127.0.0.1:8001/scrape?model=gpt-3.5-turbo
+   ```
+
+#### Response
+
+The response includes:
+
+- `status`: `"success"` or `"error"`.
+- `ai_listings`: Listings scraped by the AI scraper.
+- `manual_listings`: Listings scraped by the manual scraper.
+- `combined_listings`: Combined unique listings.
+- `used_ai_model`: The model used for the AI scraper.
+
+---
+
 ## Notes
 
 - Make sure to configure your `.env` with the OpenAI API key.
