@@ -92,6 +92,12 @@ The `/scrape` endpoint allows you to scrape property listings from a specified U
    http://127.0.0.1:8001/scrape?model=gpt-3.5-turbo
    ```
 
+4. **Scrape with `groq` (default URL):**
+
+   ```url
+   http://127.0.0.1:8001/scrape?model=groq
+   ```
+
 #### Response
 
 The response includes:
@@ -121,6 +127,7 @@ requests==2.32.3
 beautifulsoup4==4.13.4
 openai==1.75.0
 python-dotenv==1.1.0
+groq==0.13.0
 ```
 
 ---

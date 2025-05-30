@@ -5,6 +5,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Dict
 import datetime
+from dotenv import load_dotenv
+import os
+import asyncio
+import re
+
+load_dotenv()
+
+print(f"OPENAI_API_KEY loaded: {os.getenv('OPENAI_API_KEY') is not None}")
+print(f"GROQ_API_KEY loaded: {os.getenv('GROQ_API_KEY') is not None}")
 
 from db.models import Listing
 from db.database import SessionLocal, engine, Base
@@ -15,7 +24,6 @@ from scrapers.ai_scraper import scrape_ai_listings, get_ai_processed_count, rese
 
 app = FastAPI()
 
-# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,10 +32,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create database tables
 Base.metadata.create_all(bind=engine)
 
-# Pydantic Schemas
 class ListingBase(BaseModel):
     title: str
     rent: int
@@ -56,9 +62,8 @@ class ListingRead(ListingBase):
     id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True  # Updated for Pydantic V2
 
-# Dependency to get DB session
 def get_db() -> Session:
     db = SessionLocal()
     try:
@@ -66,26 +71,22 @@ def get_db() -> Session:
     finally:
         db.close()
 
-# Global flag to control scraper termination and store scraping history
 should_stop = False
-scraping_history = []  # List to store each scraping attempt
+scraping_history = []
+last_used_model = "gpt-4o-mini"
 
-# Routes
 @app.get("/")
 def read_root():
-    """Return a welcome message for the root endpoint."""
     return {"message": "Welcome to the Property Listings API"}
 
 @app.get("/listings", response_model=List[ListingRead])
 def get_listings(url: str | None = None, db: Session = Depends(get_db)):
-    """Retrieve all listings from the database, optionally filtering by URL."""
     if url:
         return db.query(Listing).filter(Listing.url == url).all()
     return db.query(Listing).all()
 
 @app.post("/listings", response_model=ListingRead)
 def create_listing(listing: ListingCreate, db: Session = Depends(get_db)):
-    """Create a new listing in the database."""
     db_listing = Listing(**listing.dict())
     db.add(db_listing)
     db.commit()
@@ -94,46 +95,44 @@ def create_listing(listing: ListingCreate, db: Session = Depends(get_db)):
 
 @app.put("/listings/{listing_id}", response_model=ListingRead)
 def update_listing(listing_id: int, listing: ListingCreate, db: Session = Depends(get_db)):
-    """Update an existing listing in the database."""
     db_listing = db.query(Listing).filter(Listing.id == listing_id).first()
     if not db_listing:
         raise HTTPException(status_code=404, detail="Listing not found")
     for key, value in listing.dict().items():
-        if key in ["rent", "area"] and value and isinstance(value, str):
-            if key == "rent":
-                value = int("".join(filter(str.isdigit, value)))
-            elif key == "area" and value != "Not Available":
-                value = int(float("".join(filter(str.isdigit, value))))
-            elif value == "Not Available":
+        if key == "rent" and value and isinstance(value, str):
+            value = int("".join(filter(str.isdigit, value)))
+        elif key == "area" and value and isinstance(value, str):
+            if value == "Not Available":
                 value = None
+            else:
+                # Clean area string similar to clean_area
+                cleaned_area = re.sub(r'[^\d.]', '', value)
+                try:
+                    value = int(float(cleaned_area)) if cleaned_area else None
+                except ValueError:
+                    print(f"Failed to convert area '{value}' to integer in update_listing")
+                    value = None
         setattr(db_listing, key, value)
     db.commit()
     db.refresh(db_listing)
     return db_listing
 
 @app.get("/scrape")
-def scrape_endpoint(url: str = "https://wolfnieruchomosci.gratka.pl/nieruchomosci/mieszkania", model: str = "gpt-4o-mini"):
-    """Scrape listings using both AI and manual scrapers with a configurable AI model."""
-    global should_stop, scraping_history
+async def scrape_endpoint(url: str = "https://wolfnieruchomosci.gratka.pl/nieruchomosci/mieszkania", model: str = "gpt-4o-mini"):
+    global should_stop, scraping_history, last_used_model
     if should_stop:
         return {"status": "error", "message": "Scraping stopped by user"}
 
-    # Valid models list
-    valid_models = ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]
-    # Use provided model if valid, otherwise fallback to default
+    valid_models = ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo", "groq"]
     model_to_use = model if model in valid_models else "gpt-4o-mini"
+    last_used_model = model_to_use
     
     try:
-        # Run AI scraper with the validated model
-        ai_listings = scrape_ai_listings(url, model=model_to_use)
-        
-        # Run manual scraper
+        ai_listings = await asyncio.to_thread(scrape_ai_listings, url, model=model_to_use)
         manual_listings = scrape_wolf(url)
         
-        # Combine results, avoiding duplicates by URL
         combined_listings = ai_listings + [l for l in manual_listings if l.get("url") not in [a["url"] for a in ai_listings]]
         
-        # Calculate attempt-specific stats
         attempt_stats = {
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "url": url,
@@ -148,7 +147,6 @@ def scrape_endpoint(url: str = "https://wolfnieruchomosci.gratka.pl/nieruchomosc
             "manual_average_memory_usage_mb": sum(l["memory_usage"] for l in manual_listings) / len(manual_listings) if manual_listings else 0
         }
         
-        # Add attempt to history
         scraping_history.append(attempt_stats)
         
         return {
@@ -163,10 +161,8 @@ def scrape_endpoint(url: str = "https://wolfnieruchomosci.gratka.pl/nieruchomosc
 
 @app.get("/stats")
 def get_stats(db: Session = Depends(get_db)):
-    """Return a detailed summary of all scraping attempts and overall stats."""
     listings = db.query(Listing).all()
     
-    # Overall stats from database
     ai_listings = [l for l in listings if l.ai_elapsed_time is not None or l.ai_memory_usage is not None]
     manual_listings = [l for l in listings if l.manual_elapsed_time is not None or l.manual_memory_usage is not None]
     
@@ -184,22 +180,35 @@ def get_stats(db: Session = Depends(get_db)):
         ) / (len(ai_listings) + len(manual_listings)) if (ai_listings or manual_listings) else 0
     }
     
-    # Return history of attempts and overall stats
     return {
         "scraping_history": scraping_history,
         "overall_stats": overall_stats
     }
 
-# Signal handler for Ctrl+C
 def signal_handler(sig, frame):
     global should_stop
     print("\nReceived Ctrl+C, shutting down gracefully...")
     should_stop = True
-    # Additional cleanup if needed (e.g., close database sessions)
 
-# Register the signal handler
-signal.signal(signal.SIGINT, signal_handler)
+class LifespanManager:
+    async def __aenter__(self):
+        loop = asyncio.get_event_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown()))
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        pass
+
+async def shutdown():
+    global should_stop
+    should_stop = True
+    print("Shutting down server...")
+
+app.add_event_handler("startup", lambda: None)
+app.add_event_handler("shutdown", shutdown)
 
 if __name__ == "__main__":
-    # Run the server with Uvicorn on port 8001
-    uvicorn.run("backend.main:app", host="127.0.0.1", port=8001, reload=True)
+    config = uvicorn.Config(app=app, host="127.0.0.1", port=8001, lifespan="auto")
+    server = uvicorn.Server(config)
+    asyncio.run(server.serve())
