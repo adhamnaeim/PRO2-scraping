@@ -1,5 +1,11 @@
 # PRO2-scraping
 
+# AI-Assisted Property Scraper
+
+A FastAPI-based property scraping system that combines traditional web scraping with LLM-assisted extraction to compare and merge results into a unified dataset.
+
+The project evaluates whether large language models can improve extraction quality alongside conventional BeautifulSoup-based scraping while exposing the results through a REST API.
+
 ## First-Time Setup
 
 ### 1. Clone the Repository
